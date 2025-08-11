@@ -1,0 +1,134 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+#include "image_format.h"
+#include <openssl/evp.h>
+
+// ANSI color codes
+#define COLOR_RED     "\x1b[31m"
+#define COLOR_GREEN   "\x1b[32m"
+#define COLOR_YELLOW  "\x1b[33m"
+#define COLOR_RESET   "\x1b[0m"
+
+// Replace this with your real pk hash (32 bytes)
+static const uint8_t OTP_PK_HASH[32] = { 0xeb,0x86,0xee,0xfd,0xbc,0x78,0xdc,0x2f,0xce,0x7b,0xba,0x53,0x84,0x53,0x4f,0x1c,0x28,0x60,0xaf,0x9d,0x6b,0xc7,0x1f,0x0b,0x33,0x04,0xe7,0x06,0xad,0x13,0xdc,0x7c };
+    0x2c,0x94,0xa4,0xc7,0xbc,0x50,0xd5,0x32,
+    0x92,0x8f,0xa7,0x33,0x76,0x6f,0x57,0xd5,
+    0x3d,0x4f,0xe0,0xd9,0xa5,0x11,0xa0,0x4c,
+    0x47,0x98,0xaa,0x9a,0x02,0x55,0x1a,0x47
+};
+
+static const uint32_t OTP_MIN_VERSION = 1;
+
+// Load file into memory
+static int load_file(const char* path, uint8_t** out, size_t* out_len) {
+    FILE* f = fopen(path, "rb");
+    if (!f) return -1;
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (n <= 0) { fclose(f); return -2; }
+    *out = (uint8_t*)malloc(n);
+    if (!*out) { fclose(f); return -3; }
+    if (fread(*out, 1, n, f) != (size_t)n) { fclose(f); free(*out); return -4; }
+    fclose(f);
+    *out_len = (size_t)n;
+    return 0;
+}
+
+// Compute SHA-256 digest of firmware
+int compute_firmware_digest(const uint8_t* data, size_t len, uint8_t* out_digest);
+
+// Verify digest using Dilithium signature
+int dilithium_verify_digest(const uint8_t* digest, size_t digest_len,
+                            const uint8_t* sig, size_t sig_len,
+                            const uint8_t* pk, size_t pk_len);
+
+// Verifies a single slot's firmware
+static int verify_slot(const char* hdr_path, const char* fw_path) {
+    uint8_t *hdr = NULL, *fw = NULL;
+    size_t hdr_len = 0, fw_len = 0;
+
+    printf(COLOR_YELLOW "[*] Verifying slot: %s, %s\n" COLOR_RESET, hdr_path, fw_path);
+
+    if (load_file(hdr_path, &hdr, &hdr_len) || load_file(fw_path, &fw, &fw_len)) {
+        printf(COLOR_RED "[-] Failed to load header/payload.\n" COLOR_RESET);
+        return 0;
+    }
+
+    if (hdr_len < HDR_SIZE) {
+        printf(COLOR_RED "[-] Header too small.\n" COLOR_RESET);
+        return 0;
+    }
+
+    fw_header_t h;
+    memcpy(&h, hdr, sizeof(fw_header_t));
+
+    if (h.magic != HDR_MAGIC || h.header_size != HDR_SIZE) {
+        printf(COLOR_RED "[-] Bad magic or header size.\n" COLOR_RESET);
+        return 0;
+    }
+
+    if (h.version < OTP_MIN_VERSION) {
+        printf(COLOR_RED "[-] Rollback attempt: version=%u < %u\n" COLOR_RESET,
+               h.version, OTP_MIN_VERSION);
+        return 0;
+    }
+
+    if (h.fw_size != fw_len) {
+        printf(COLOR_RED "[-] Size mismatch: header=%u, file=%zu\n" COLOR_RESET,
+               h.fw_size, fw_len);
+        return 0;
+    }
+
+    if (HDR_BLOB_OFFSET + h.pk_len + h.sig_len > HDR_SIZE) {
+        printf(COLOR_RED "[-] Header blob overflow.\n" COLOR_RESET);
+        return 0;
+    }
+
+    const uint8_t* blob = hdr + HDR_BLOB_OFFSET;
+    const uint8_t* pk = blob;
+    const uint8_t* sig = blob + h.pk_len;
+
+    uint8_t digest[32];
+    compute_firmware_digest(fw, fw_len, digest);
+
+    uint8_t pk_hash[32];
+    compute_firmware_digest(pk, h.pk_len, pk_hash);
+    if (memcmp(pk_hash, OTP_PK_HASH, 32) != 0) {
+        printf(COLOR_RED "[-] PK mismatch vs OTP.\n" COLOR_RESET);
+        return 0;
+    }
+
+    if (dilithium_verify_digest(digest, sizeof(digest), sig, h.sig_len, pk, h.pk_len) != 0) {
+        printf(COLOR_RED "[-] Signature verify FAIL.\n" COLOR_RESET);
+        return 0;
+    }
+
+    printf(COLOR_GREEN "[+] VERIFY PASS — jumping to firmware (%s)\n" COLOR_RESET, fw_path);
+    return 1; // success
+}
+
+// Main supports 4 args: Slot A header, Slot A payload, Slot B header, Slot B payload
+int main(int argc, char** argv) {
+    if (argc != 5) {
+        fprintf(stderr, "Usage: %s <hdr_a> <fw_a> <hdr_b> <fw_b>\n", argv[0]);
+        return 1;
+    }
+
+    // Try Slot A first
+    if (verify_slot(argv[1], argv[2])) {
+        return 0;
+    }
+
+    // If Slot A fails, try Slot B
+    printf(COLOR_YELLOW "[*] Slot A failed, trying Slot B...\n" COLOR_RESET);
+    if (verify_slot(argv[3], argv[4])) {
+        return 0;
+    }
+
+    // If both fail, stop boot
+    printf(COLOR_RED "[X] Both slots failed verification. System halt.\n" COLOR_RESET);
+    return 1;
+}

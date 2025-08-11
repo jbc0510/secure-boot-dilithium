@@ -1,0 +1,2 @@
+sw/verify_lib.c:18:5:compute_firmware_digest	64	static
+sw/verify_lib.c:38:5:dilithium_verify_digest	64	static
