@@ -58,8 +58,32 @@ test_ab:
 	@echo "=== [A/B Slot Simulation] ==="
 	@./tools/test_ab_slots.sh
 
+
+# --- Demos ---
+demo_baseline:
+	@./tools/demo_baseline.sh
+
+demo_ab_counter:
+	@./tools/demo_ab_counter.sh
+
+demo_rollback_only:
+	@./tools/demo_rollback_only.sh
+
+demo_rollback_fail:
+	@./tools/demo_rollback_fail.sh
+
+demo_bump_to_2:
+	@./tools/demo_bump_to_2.sh
+
+footprint:
+	@./tools/measure_footprint.sh
+
 all-demos:
 	@./tools/run_all_demos.sh
+
+# --- Verification matrix (see tools/verify_matrix.sh) ---
+verify-matrix:
+	@./tools/verify_matrix.sh
 
 
 
