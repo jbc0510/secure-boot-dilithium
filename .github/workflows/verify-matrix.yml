@@ -1,4 +1,3 @@
-# .github/workflows/verify-matrix.yml
 name: Secure Boot CI
 
 on:
@@ -15,11 +14,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install build deps (gcc, OpenSSL, CMake/Ninja, tools)
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential gcc make \
-            binutils bash coreutils xxd
+          sudo apt-get install -y \
+            build-essential gcc make cmake ninja-build pkg-config \
+            libssl-dev xxd coreutils gawk git
 
-      - name: Run Secure Boot Verification Matrix
-        run: make verify-matrix
+      - name: Build & install liboqs (shared, OpenSSL-enabled)
+        run: |
+          git clone --depth 1 https://github.com/open-quantum-safe/liboqs.git
+          cd liboqs
+          mkdir build && cd build
+          cmake -GNinja -DOQS_USE_OPENSSL=ON -DBUILD_SHARED_LIBS=ON ..
+          ninja
+          sudo ninja install
+          sudo ldconfig
+
+      - name: Build & run verification matrix
+        env:
+          LD_LIBRARY_PATH: /usr/local/lib
+        run: |
+          make verify-matrix
