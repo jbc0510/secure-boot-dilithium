@@ -8,7 +8,19 @@ on:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    name: Verify (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-22.04, ubuntu-24.04 ]
+
+    env:
+      # Where we'll build liboqs; cached between runs
+      OQS_SRC: ${{ github.workspace }}/.deps/liboqs
+      OQS_BUILD: ${{ github.workspace }}/.deps/liboqs/build
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      LD_LIBRARY_PATH: /usr/local/lib
 
     steps:
       - name: Checkout repository
@@ -19,20 +31,66 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             build-essential gcc make cmake ninja-build pkg-config \
-            libssl-dev xxd coreutils gawk git
+            libssl-dev xxd coreutils gawk git ccache
+
+      - name: Set up ccache
+        run: |
+          echo 'export PATH="/usr/lib/ccache:$PATH"' >> $GITHUB_ENV
+          echo 'CC="ccache gcc"' >> $GITHUB_ENV
+          echo 'CXX="ccache g++"' >> $GITHUB_ENV
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ runner.os }}-${{ hashFiles('**/*.c','**/*.h','**/CMakeLists.txt','Makefile') }}
+          restore-keys: |
+            ccache-${{ runner.os }}-
+
+      - name: Cache liboqs build dir
+        id: cache-oqs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.OQS_BUILD }}
+            ${{ env.OQS_SRC }}/CMakeCache.txt
+          key: oqs-${{ runner.os }}-${{ hashFiles('.github/workflows/verify-matrix.yml') }}
+          restore-keys: |
+            oqs-${{ runner.os }}-
+
+      - name: Fetch liboqs (or update)
+        run: |
+          mkdir -p "$(dirname "$OQS_SRC")"
+          if [ ! -d "$OQS_SRC/.git" ]; then
+            git clone --depth 1 https://github.com/open-quantum-safe/liboqs.git "$OQS_SRC"
+          else
+            git -C "$OQS_SRC" fetch --depth 1 origin
+            git -C "$OQS_SRC" reset --hard origin/HEAD
+          fi
 
       - name: Build & install liboqs (shared, OpenSSL-enabled)
         run: |
-          git clone --depth 1 https://github.com/open-quantum-safe/liboqs.git
-          cd liboqs
-          mkdir build && cd build
+          mkdir -p "$OQS_BUILD"
+          cd "$OQS_BUILD"
           cmake -GNinja -DOQS_USE_OPENSSL=ON -DBUILD_SHARED_LIBS=ON ..
-          ninja
+          ninja -v
           sudo ninja install
           sudo ldconfig
 
-      - name: Build & run verification matrix
-        env:
-          LD_LIBRARY_PATH: /usr/local/lib
+      - name: Run verification matrix (tee log)
         run: |
-          make verify-matrix
+          mkdir -p out
+          set -o pipefail
+          make verify-matrix 2>&1 | tee out/ci-verify-matrix.log
+
+      - name: Upload artifacts (logs + outputs)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-matrix-${{ matrix.os }}-${{ github.sha }}
+          path: |
+            out/**
+            !out/*.payload   # (optional) exclude random payload blobs if you want smaller artifacts
+            !out/*.bin
+            tools/*.sh
+          if-no-files-found: warn
