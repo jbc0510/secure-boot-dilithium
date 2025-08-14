@@ -1,0 +1,3 @@
+[submodule "sw/golden/ext/pqclean"]
+	path = sw/golden/ext/pqclean
+	url = https://github.com/pqclean/pqclean

@@ -85,6 +85,19 @@ all-demos:
 verify-matrix:
 	@./tools/verify_matrix.sh
 
+demo-suite:
+	@./tools/secure_boot_demo_suite.sh
+
+
+.PHONY: demo demo-clean
+
+demo:
+	./demo.sh
+
+demo-clean:
+	rm -rf build sim/obj_dir sw/golden/signer
+
+
 
 
 clean:
