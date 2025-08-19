@@ -30,14 +30,14 @@ cp -f -- "$INPUT" out/firmware.payload
 # Sizes before
 PAYLOAD_SIZE="$(bytes out/firmware.payload)"
 PAYLOAD_LABEL="$(label "$PAYLOAD_SIZE")"
-
 HEADER_PATH="out/firmware.header"
+PAYLOAD_PATH="out/firmware.payload"
 
 # Time sign
 RAW_SIGN=$({ /usr/bin/time -f "%e" \
-  ./tools/sign_fw_c out/firmware.payload out/pub.key out/sec.key "$VERSION" "$HEADER_PATH" \
+  ./tools/sign_fw_c "$PAYLOAD_PATH" out/pub.key out/sec.key "$VERSION" "$HEADER_PATH" \
   >/dev/null; } 2>&1)
-SIGN_TIME=$(printf "%.5f" "$RAW_SIGN")
+SIGN_TIME="$(printf "%.5f" "$RAW_SIGN")"
 
 # Sizes after
 HEADER_SIZE="$(bytes "$HEADER_PATH")"
@@ -46,20 +46,20 @@ PACKAGE_SIZE=$((PAYLOAD_SIZE + HEADER_SIZE))
 PACKAGE_LABEL="$(label "$PACKAGE_SIZE")"
 GROWTH_BYTES=$((PACKAGE_SIZE - PAYLOAD_SIZE))
 GROWTH_LABEL="$(label "$GROWTH_BYTES")"
-GROWTH_PCT=$(awk -v g="$GROWTH_BYTES" -v p="$PAYLOAD_SIZE" 'BEGIN{if(p==0){print "0.00"} else printf("%.2f",(g/p)*100)}')
+GROWTH_PCT="$(awk -v g="$GROWTH_BYTES" -v p="$PAYLOAD_SIZE" 'BEGIN{if(p==0){print "0.00"} else printf("%.2f",(g/p)*100)}')"
 
 # Verify
 set +e
 RAW_VERIFY=$({ /usr/bin/time -f "%e" \
-  ./rom_mock "$HEADER_PATH" out/firmware.payload "$HEADER_PATH" out/firmware.payload \
+  ./rom_mock "$HEADER_PATH" "$PAYLOAD_PATH" "$HEADER_PATH" "$PAYLOAD_PATH" \
   >/dev/null; } 2>&1)
 RC=$?
 set -e
-VERIFY_TIME=$(printf "%.5f" "$RAW_VERIFY")
+VERIFY_TIME="$(printf "%.5f" "$RAW_VERIFY")"
 VERIFY_RESULT="PASS"; [ $RC -ne 0 ] && VERIFY_RESULT="FAIL"
 
 # Report
-cat <<EOF
+cat <<REPORT
 
 ================ Secure Signing Report ================
 Input file        : $INPUT
@@ -72,6 +72,30 @@ Sign time (s)     : ${SIGN_TIME}
 Verify time (s)   : ${VERIFY_TIME}
 Verify result     : ${VERIFY_RESULT}
 Header path       : ${HEADER_PATH}
-Payload path      : out/firmware.payload
+Payload path      : ${PAYLOAD_PATH}
 =======================================================
-EOF
+REPORT
+
+# --- JSON log (one line per run) ---
+TS="$(date -Iseconds 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")"
+jq -nc \
+  --arg ts "$TS" \
+  --arg file "$INPUT" \
+  --arg ver "$VERSION" \
+  --arg result "$VERIFY_RESULT" \
+  --arg sign "$SIGN_TIME" \
+  --arg verify "$VERIFY_TIME" \
+  --arg header_path "$HEADER_PATH" \
+  --arg payload_path "$PAYLOAD_PATH" \
+  --argjson payload "$PAYLOAD_SIZE" \
+  --argjson header "$HEADER_SIZE" \
+  --argjson package "$PACKAGE_SIZE" \
+'{
+  ts: $ts,
+  file: $file,
+  version: $ver,
+  sizes: { payload: $payload, header: $header, package: $package },
+  times: { sign: ($sign|tonumber), verify: ($verify|tonumber) },
+  result: $result,
+  paths: { header: $header_path, payload: $payload_path }
+}' >> out/sign_runs.jsonl

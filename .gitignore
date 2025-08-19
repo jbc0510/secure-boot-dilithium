@@ -15,3 +15,6 @@ rom/otp_pk.h
 *.swp
 *.swo
 .DS_Store
+
+out/sign_runs.jsonl
+out/sign_runs.csv
