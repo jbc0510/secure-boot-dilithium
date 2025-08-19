@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include "otp_pk.h"
 #include "image_format.h"
 #include <openssl/evp.h>
 
@@ -11,14 +12,8 @@
 #define C_GRN "\x1b[32m"
 #define C_YEL "\x1b[33m"
 #define C_RST "\x1b[0m"
+#define OTP_PK_HASH (OTP_PK_HASHES[0])
 
-// Device OTP: SHA-256(pubkey.bin)
-static const uint8_t OTP_PK_HASH[32] = {
-  0xeb,0x86,0xee,0xfd,0xbc,0x78,0xdc,0x2f,
-  0xce,0x7b,0xba,0x53,0x84,0x53,0x4f,0x1c,
-  0x28,0x60,0xaf,0x9d,0x6b,0xc7,0x1f,0x0b,
-  0x33,0x04,0xe7,0x06,0xad,0x13,0xdc,0x7c
-};
 
 // --- Protos from sw/verify_lib.c ---
 int dilithium_verify_digest(const uint8_t* digest, size_t digest_len,

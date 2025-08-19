@@ -1,0 +1,8 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "Build ROM", "type": "shell", "command": "make rom_mock", "group": "build", "problemMatcher": [] },
+    { "label": "Sign+Verify (v++)", "type": "shell", "command": "./tools/sign_fw_c out/firmware.payload out/pub.key out/sec.key $(($(cat out/otp_counter.bin 2>/dev/null | od -An -t u4 | tr -d ' ') + 1)) out/firmware.header && ./rom_mock out/firmware.header out/firmware.payload", "problemMatcher": [] },
+    { "label": "Reset OTP counter", "type": "shell", "command": "printf '\\x00\\x00\\x00\\x00' > out/otp_counter.bin", "problemMatcher": [] }
+  ]
+}
