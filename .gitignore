@@ -5,3 +5,10 @@ out/
 *.log
 *.swp
 .DS_Store
+out/
+build/
+rom_mock
+rom_mock_dbg
+sbd-env/
+ext/
+liboqs/
