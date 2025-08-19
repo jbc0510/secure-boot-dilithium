@@ -1,10 +1,4 @@
-out/
-*.map
-*.bin
-*.o
-*.log
-*.swp
-.DS_Store
+# Ignore build artifacts and temporary files
 out/
 build/
 rom_mock
@@ -12,3 +6,12 @@ rom_mock_dbg
 sbd-env/
 ext/
 liboqs/
+rom/otp_pk.h
+
+# Ignore VSCode settings if you don't want them in the repo
+.vscode/
+
+# Ignore any other OS-specific or editor files
+*.swp
+*.swo
+.DS_Store
