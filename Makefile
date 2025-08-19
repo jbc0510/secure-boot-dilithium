@@ -88,3 +88,13 @@ report: all
 	@./tools/run_and_compare.sh
 	@echo ">>> Report at: out/pass_vs_fail_diff.html"
 	@command -v xdg-open >/dev/null 2>&1 && xdg-open out/pass_vs_fail_diff.html || true
+
+.PHONY: golden
+golden:
+	./tools/golden.sh
+
+.PHONY: sweep sign-file
+sweep:
+	./tools/size_sweep.sh
+sign-file:
+	./tools/sign_file.sh $(file) $(ver)
