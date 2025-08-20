@@ -35,9 +35,12 @@ out:
   return rc;
 }
 
-int dilithium_verify_digest(const uint8_t* digest, size_t digest_len,
-                            const uint8_t* sig, size_t sig_len,
-                            const uint8_t* pk, size_t pk_len) {
+int dilithium_verify_digest(
+    const uint8_t *digest, size_t digest_len,
+    const uint8_t *sig, size_t sig_len,
+    const uint8_t *pk, size_t pk_len) {
+
+    (void)pk_len;  // suppress unused parameter warning
 #ifndef HAVE_OQS
   (void)digest; (void)digest_len; (void)sig; (void)sig_len; (void)pk; (void)pk_len;
   return -100;
