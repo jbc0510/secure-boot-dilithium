@@ -98,3 +98,9 @@ sweep:
 	./tools/size_sweep.sh
 sign-file:
 	./tools/sign_file.sh $(file) $(ver)
+
+	.PHONY: regen
+regen:
+	./tools/gen_otp_header.sh out/pub.key
+	$(MAKE) rom_mock
+

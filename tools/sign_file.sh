@@ -12,8 +12,7 @@ label() { numfmt --to=iec --suffix=B "$1"; }
 
 # Ensure keys + OTP header + ROM
 [ -f out/pub.key ] || ./tools/gen_keys_c out/pub.key out/sec.key
-./tools/gen_otp_header.sh out/pub.key
-make -s rom_mock
+make -s regen
 
 # Choose version: next OTP if not supplied (do NOT reset OTP)
 if [ -z "$VERSION" ]; then
