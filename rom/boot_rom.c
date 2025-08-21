@@ -1,4 +1,5 @@
-// rom/boot_rom.c — A/B slots, PK-hash binding, Dilithium verify, OTP counter (color, strict sizes)
+// rom/boot_rom.c — A/B slots, PK-hash binding, Dilithium verify, OTP counter
+// (color, strict sizes, size policy, zero-padding enforcement)
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +20,11 @@
 #endif
 #ifndef D2_SIG_LEN
 #define D2_SIG_LEN 2420
+#endif
+
+// Policy: maximum allowed firmware size (adjust as needed)
+#ifndef FW_MAX_BYTES
+#define FW_MAX_BYTES (64u << 20)  // 64 MiB
 #endif
 
 #define OTP_PK_HASH (OTP_PK_HASHES[0])
@@ -106,15 +112,31 @@ static int verify_slot(const char* hdr_path, const char* fw_path) {
     printf(C_RED "[-] Header blob overflow\n" C_RST); goto fail;
   }
 
-  // NEW: strict algorithm size checks (bind to Dilithium‑2)
+  // Strict algorithm size checks (bind to Dilithium‑2)
   if (h.pk_len != D2_PK_LEN || h.sig_len != D2_SIG_LEN) {
     printf(C_RED "[-] Bad key/signature lengths (pk=%u, sig=%u)\n" C_RST, h.pk_len, h.sig_len);
+    goto fail;
+  }
+
+  // Policy: firmware size must be within bounds
+  if (h.fw_size == 0 || h.fw_size > FW_MAX_BYTES) {
+    printf(C_RED "[-] FW size out of policy (0 or >%u bytes)\n" C_RST, (unsigned)FW_MAX_BYTES);
     goto fail;
   }
 
   const uint8_t* blob = hdr + HDR_BLOB_OFFSET;
   const uint8_t* pk   = blob;
   const uint8_t* sig  = blob + h.pk_len;
+
+  // Require header padding area to be zero
+  {
+    size_t pad_off = (size_t)HDR_BLOB_OFFSET + (size_t)h.pk_len + (size_t)h.sig_len;
+    for (size_t i = pad_off; i < (size_t)HDR_SIZE; i++) {
+      if (hdr[i] != 0) {
+        printf(C_RED "[-] Header padding is non-zero\n" C_RST); goto fail;
+      }
+    }
+  }
 
   // PK-hash binding (OTP contains SHA-256 of allowed PK)
   uint8_t pk_hash[32];

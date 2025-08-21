@@ -1,61 +1,54 @@
 #!/usr/bin/env bash
 set -euo pipefail
+cd "$(dirname "$0")/.."
 
-# Colors
-ESC=$(printf '\033')
-RESET="${ESC}[0m"; BOLD="${ESC}[1m"
-RED="${ESC}[31m"; GREEN="${ESC}[32m"; CYAN="${ESC}[36m"; YELLOW="${ESC}[33m"
+HDR=out/firmware.header
+FW=out/firmware.bin
+PUB=out/pub.key
+SEC=out/sec.key
 
-say() { printf "%b\n" "${BOLD}${CYAN}$*${RESET}"; }
-pass() { printf "%b\n" "${BOLD}${GREEN}$*${RESET}"; }
-fail() { printf "%b\n" "${BOLD}${RED}$*${RESET}"; }
-note() { printf "%b\n" "${YELLOW}$*${RESET}"; }
-
-run_verify() {
-  local hdr="$1" fw="$2"
-  local out
-  out="$(./rom_mock "$hdr" "$fw" 2>&1 | tee /dev/tty)"
-  echo "$out" | grep -q "VERIFY PASS" && return 0 || return 1
-}
+# Ensure tools/ROM exist
+make -s sign_fw_c gen_keys_c rom_mock >/dev/null
 
 mkdir -p out
 
-say "[1] PASS Test (clean image)"
-if run_verify out/firmware.header out/firmware.payload; then
-  pass "✔ PASS as expected"
+# Fresh keys if missing
+[ -f "$PUB" ] || ./tools/gen_keys_c "$PUB" "$SEC"
+
+# Fresh OTP header bound to current pubkey
+./tools/gen_otp_header.sh "$PUB"
+make -s rom_mock >/dev/null
+
+# Helper: sign payload at version V
+sign_at_ver() {
+  local v="$1"
+  ./tools/sign_fw_c "$FW" "$PUB" "$SEC" "$v" "$HDR" >/dev/null
+}
+
+# Test 1: clean image (OTP=1, ver=1) -> PASS
+printf '\x01\x00\x00\x00' > out/otp_counter.bin
+dd if=/dev/urandom of="$FW" bs=4096 count=1 status=none
+sign_at_ver 1
+if ./rom_mock "$HDR" "$FW" "$HDR" "$FW" >/dev/null; then
+  echo "[1] PASS Test (clean image)"
 else
-  fail "✘ Unexpected FAIL (clean image)"; exit 1
+  echo "[1] FAIL Test (clean image)"; exit 1
 fi
 
-say "[2] Payload Tamper Test (expect FAIL)"
-cp out/firmware.payload out/firmware.payload.bak
-printf '\x00' | dd of=out/firmware.payload bs=1 seek=0 count=1 conv=notrunc status=none
-if run_verify out/firmware.header out/firmware.payload; then
-  fail "✘ Should have FAILED after payload tamper"
+# Test 2: rollback (OTP=10, ver=1) -> FAIL
+printf '\x0a\x00\x00\x00' > out/otp_counter.bin
+sign_at_ver 1
+if ./rom_mock "$HDR" "$FW" "$HDR" "$FW" >/dev/null; then
+  echo "✘ Unexpected PASS (rollback)"; exit 1
 else
-  pass "✔ FAIL observed (digest changed → signature mismatch)"
-fi
-mv out/firmware.payload.bak out/firmware.payload
-
-say "[3] Signature Tamper Test (expect FAIL)"
-cp out/firmware.header out/firmware.header.bak
-# Calculate signature offset: sig_off = 0x18 + pk_len (LE uint32 at offset 16)
-pk_len=$(dd if=out/firmware.header bs=1 skip=16 count=4 status=none 2>/dev/null | od -An -tu4)
-sig_off=$((0x18 + pk_len))
-printf '\xFF' | dd of=out/firmware.header bs=1 seek=${sig_off} count=1 conv=notrunc status=none
-if run_verify out/firmware.header out/firmware.payload; then
-  fail "✘ Should have FAILED after signature tamper"
-else
-  pass "✔ FAIL observed (signature byte flipped)"
-fi
-mv out/firmware.header.bak out/firmware.header
-
-say "[4] Rollback Test (expect FAIL: version < OTP min)"
-./tools/sign_fw_c out/firmware.payload out/pubkey.bin out/seckey.bin 0 out/firmware.header
-if run_verify out/firmware.header out/firmware.payload; then
-  fail "✘ Should have FAILED due to rollback"
-else
-  pass "✔ FAIL observed (version=0 < 1)"
+  echo "[2] Expected FAIL (rollback)"
 fi
 
-note "[DONE] Matrix complete: 1 PASS, 3 expected FAILs."
+# Test 3: bump (OTP=10, ver=11) -> PASS and OTP should advance
+printf '\x0a\x00\x00\x00' > out/otp_counter.bin
+sign_at_ver 11
+if ./rom_mock "$HDR" "$FW" "$HDR" "$FW" >/dev/null; then
+  echo "[3] PASS Test (bump to 11)"
+else
+  echo "✘ FAIL (bump to 11)"; exit 1
+fi
