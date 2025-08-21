@@ -1,3 +1,4 @@
+// tools/sign_fw_c.c — build header with fw_header_t from image_format.h
 #include <oqs/oqs.h>
 #include <openssl/evp.h>
 #include <stdint.h>
@@ -5,8 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define HDR_MAGIC 0x44494C49u   /* 'DILI' */
-#define HDR_SIZE  4096u         /* must match rom/image_format.h */
+#include "image_format.h"   // <- brings fw_header_t, HDR_MAGIC, HDR_SIZE, D2_* and HDR_BLOB_OFFSET
 
 static const char *k_domain = "BOOT_FW_V1";
 #define DIGEST_LEN 64
@@ -14,12 +14,12 @@ static const char *k_domain = "BOOT_FW_V1";
 static int read_all(const char *path, uint8_t **buf, size_t *len) {
   FILE *f = fopen(path, "rb");
   if (!f) return -1;
-  fseek(f, 0, SEEK_END);
-  long n = ftell(f); if (n < 0) { fclose(f); return -2; }
-  fseek(f, 0, SEEK_SET);
+  if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return -2; }
+  long n = ftell(f); if (n < 0) { fclose(f); return -3; }
+  if (fseek(f, 0, SEEK_SET) != 0) { fclose(f); return -4; }
   *buf = (uint8_t*)malloc((size_t)n);
-  if (!*buf) { fclose(f); return -3; }
-  if (fread(*buf, 1, (size_t)n, f) != (size_t)n) { fclose(f); free(*buf); return -4; }
+  if (!*buf) { fclose(f); return -5; }
+  if (fread(*buf, 1, (size_t)n, f) != (size_t)n) { fclose(f); free(*buf); return -6; }
   fclose(f);
   *len = (size_t)n;
   return 0;
@@ -60,48 +60,74 @@ int main(int argc, char **argv) {
 
   uint8_t *fw=NULL, *pk=NULL, *sk=NULL;
   size_t fw_len=0, pk_len=0, sk_len=0;
-  if (read_all(fw_path, &fw, &fw_len) || read_all(pk_path, &pk, &pk_len) || read_all(sk_path, &sk, &sk_len)) {
-    fprintf(stderr, "[-] read inputs failed\n"); return 1;
+  if (read_all(fw_path, &fw, &fw_len) ||
+      read_all(pk_path, &pk, &pk_len) ||
+      read_all(sk_path, &sk, &sk_len)) {
+    fprintf(stderr, "[-] read inputs failed\n");
+    return 1;
+  }
+
+  // Enforce Dilithium‑2 lengths in the tool as well
+  if (pk_len != D2_PK_LEN) {
+    fprintf(stderr, "[-] pubkey length mismatch: got %zu, expected %d\n", pk_len, D2_PK_LEN);
+    return 1;
   }
 
   uint8_t digest[DIGEST_LEN];
   if (shake256_digest(fw, fw_len, digest, DIGEST_LEN) != 0) {
-    fprintf(stderr, "[-] digest failed\n"); return 1;
+    fprintf(stderr, "[-] digest failed\n");
+    return 1;
   }
 
   OQS_SIG *s = OQS_SIG_new(OQS_SIG_alg_dilithium_2);
   if (!s) { fprintf(stderr, "OQS_SIG_new failed\n"); return 1; }
 
   size_t sig_len = s->length_signature;
-  uint8_t *sig = (uint8_t*)malloc(sig_len);
-  if (!sig) { fprintf(stderr, "malloc sig failed\n"); return 1; }
-
-  if (OQS_SIG_sign(s, sig, &sig_len, digest, DIGEST_LEN, sk) != OQS_SUCCESS) {
-    fprintf(stderr, "[-] sign failed\n"); return 1;
+  if ((int)sig_len != D2_SIG_LEN) {
+    fprintf(stderr, "[-] signer reports sig_len=%zu, expected %d\n", sig_len, D2_SIG_LEN);
+    OQS_SIG_free(s);
+    return 1;
   }
 
-  /* Build header: magic, hdr_size, version, fw_size, pk_len, sig_len, then pk||sig, padded to HDR_SIZE */
+  uint8_t *sig = (uint8_t*)malloc(sig_len);
+  if (!sig) { fprintf(stderr, "malloc sig failed\n"); OQS_SIG_free(s); return 1; }
+
+  if (OQS_SIG_sign(s, sig, &sig_len, digest, DIGEST_LEN, sk) != OQS_SUCCESS) {
+    fprintf(stderr, "[-] sign failed\n");
+    free(sig); OQS_SIG_free(s);
+    return 1;
+  }
+
+  // Build header using fw_header_t and HDR_BLOB_OFFSET
   uint8_t header[HDR_SIZE];
   memset(header, 0, sizeof(header));
 
-  uint32_t *u = (uint32_t*)header; /* little-endian host assumption is fine for tooling */
-  u[0] = HDR_MAGIC;
-  u[1] = HDR_SIZE;
-  u[2] = (uint32_t)version;
-  u[3] = (uint32_t)fw_len;
-  u[4] = (uint32_t)pk_len;
-  u[5] = (uint32_t)sig_len;
+  fw_header_t h = {
+    .magic       = HDR_MAGIC,
+    .header_size = HDR_SIZE,
+    .version     = (uint32_t)version,
+    .fw_size     = (uint32_t)fw_len,
+    .pk_len      = (uint32_t)pk_len,
+    .sig_len     = (uint32_t)sig_len
+  };
 
-  size_t blob_off = 0x18;
-  if (blob_off + pk_len + sig_len > HDR_SIZE) {
-    fprintf(stderr, "[-] header too small for pk+sig (need %zu)\n", blob_off+pk_len+sig_len);
+  // Copy fixed struct first
+  memcpy(header, &h, sizeof(h));
+
+  // Copy pk||sig at defined blob offset
+  if ((size_t)HDR_BLOB_OFFSET + pk_len + sig_len > (size_t)HDR_SIZE) {
+    fprintf(stderr, "[-] header too small for pk+sig (need %zu)\n",
+            (size_t)HDR_BLOB_OFFSET + pk_len + sig_len);
+    free(sig); OQS_SIG_free(s); free(fw); free(pk); free(sk);
     return 1;
   }
-  memcpy(header + blob_off, pk, pk_len);
-  memcpy(header + blob_off + pk_len, sig, sig_len);
+  memcpy(header + HDR_BLOB_OFFSET, pk, pk_len);
+  memcpy(header + HDR_BLOB_OFFSET + pk_len, sig, sig_len);
 
   if (write_all(out_hdr, header, sizeof(header)) != 0) {
-    fprintf(stderr, "[-] write header failed\n"); return 1;
+    fprintf(stderr, "[-] write header failed\n");
+    free(sig); OQS_SIG_free(s); free(fw); free(pk); free(sk);
+    return 1;
   }
 
   fprintf(stdout, "[+] header written: %s (pk=%zu, sig=%zu, fw=%zu, ver=%lu)\n",

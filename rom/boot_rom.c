@@ -1,4 +1,4 @@
-// rom/boot_rom.c — A/B slots, PK-hash binding, Dilithium verify, OTP counter (color)
+// rom/boot_rom.c — A/B slots, PK-hash binding, Dilithium verify, OTP counter (color, strict sizes)
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,8 +12,16 @@
 #define C_GRN "\x1b[32m"
 #define C_YEL "\x1b[33m"
 #define C_RST "\x1b[0m"
-#define OTP_PK_HASH (OTP_PK_HASHES[0])
 
+// If not already defined in image_format.h, enforce Dilithium‑2 lengths here.
+#ifndef D2_PK_LEN
+#define D2_PK_LEN 1312
+#endif
+#ifndef D2_SIG_LEN
+#define D2_SIG_LEN 2420
+#endif
+
+#define OTP_PK_HASH (OTP_PK_HASHES[0])
 
 // --- Protos from sw/verify_lib.c ---
 int dilithium_verify_digest(const uint8_t* digest, size_t digest_len,
@@ -87,6 +95,7 @@ static int verify_slot(const char* hdr_path, const char* fw_path) {
 
   fw_header_t h; memcpy(&h, hdr, sizeof(fw_header_t));
 
+  // Basic structural checks
   if (h.magic != HDR_MAGIC || h.header_size != HDR_SIZE) {
     printf(C_RED "[-] Bad magic or header_size\n" C_RST); goto fail;
   }
@@ -97,11 +106,17 @@ static int verify_slot(const char* hdr_path, const char* fw_path) {
     printf(C_RED "[-] Header blob overflow\n" C_RST); goto fail;
   }
 
+  // NEW: strict algorithm size checks (bind to Dilithium‑2)
+  if (h.pk_len != D2_PK_LEN || h.sig_len != D2_SIG_LEN) {
+    printf(C_RED "[-] Bad key/signature lengths (pk=%u, sig=%u)\n" C_RST, h.pk_len, h.sig_len);
+    goto fail;
+  }
+
   const uint8_t* blob = hdr + HDR_BLOB_OFFSET;
   const uint8_t* pk   = blob;
   const uint8_t* sig  = blob + h.pk_len;
 
-  // PK-hash binding
+  // PK-hash binding (OTP contains SHA-256 of allowed PK)
   uint8_t pk_hash[32];
   if (sha256(pk, h.pk_len, pk_hash) != 0) { printf(C_RED "[-] pk hash calc failed\n" C_RST); goto fail; }
   if (memcmp(pk_hash, OTP_PK_HASH, 32) != 0) { printf(C_RED "[-] PK mismatch vs OTP\n" C_RST); goto fail; }

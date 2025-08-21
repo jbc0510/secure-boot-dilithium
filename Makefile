@@ -1,47 +1,54 @@
-# Makefile (repo root)
+# ==== Toolchain & Paths ====
+CC       ?= gcc
+CFLAGS   ?= -O2 -Wall -Wextra
+PREFIX   ?= $(HOME)/.local
+OQS_INC  ?= $(PREFIX)/include
+OQS_LIB  ?= $(PREFIX)/lib
+RPATH    ?= $(OQS_LIB)
 
-CC ?= gcc
-CFLAGS ?= -O2 -Wall -Wextra
-PREFIX ?= $(HOME)/.local
-OQS_INC ?= $(PREFIX)/include
-OQS_LIB ?= $(PREFIX)/lib
-RPATH ?= $(OQS_LIB)
+ROM      := rom_mock
+OTP_HDR  := rom/otp_pk.h
 
-ROM := rom_mock
-OTP_HDR := rom/otp_pk.h
-
-.PHONY: all clean lab_flow demo demo-clean report test_ab \
-        demo_baseline demo_ab_counter demo_rollback_only \
+# ==== Phony Targets ====
+.PHONY: all clean lab_flow demo demo-clean report \
+        test_ab demo_baseline demo_ab_counter demo_rollback_only \
         demo_rollback_fail demo_bump_to_2 footprint all-demos \
-        verify-matrix demo-suite
+        verify-matrix demo-suite golden sweep sign-file regen sign-folder
 
+# ==== Default ====
 all: $(ROM) gen_keys_c sign_fw_c test_matrix
 
+# ==== OTP header (generated from public key) ====
 $(OTP_HDR): out/pub.key tools/gen_otp_header.sh
 	tools/gen_otp_header.sh out/pub.key
 
+# ==== ROM Mock (secure boot simulator) ====
 $(ROM): $(OTP_HDR) rom/boot_rom.c sw/verify_lib.c rom/image_format.h
 	@echo "=== [1/4] Building ROM mock (secure boot simulator) ==="
 	$(CC) $(CFLAGS) -Irom -I$(OQS_INC) -L$(OQS_LIB) -o $@ \
 	    rom/boot_rom.c sw/verify_lib.c \
 	    -loqs -lcrypto -lpthread -Wl,-rpath,$(RPATH)
 
+# ==== Key Generator Tool ====
 gen_keys_c: tools/gen_keys_c.c
 	@echo "=== [2/4] Building Key Generator Tool ==="
 	$(CC) $(CFLAGS) -I$(OQS_INC) -L$(OQS_LIB) -o tools/gen_keys_c \
 	    tools/gen_keys_c.c \
 	    -loqs -lcrypto -lpthread -Wl,-rpath,$(RPATH)
 
-sign_fw_c: tools/sign_fw_c.c
+# ==== Firmware Signing Tool ====
+sign_fw_c: tools/sign_fw_c.c rom/image_format.h
 	@echo "=== [3/4] Building Firmware Signing Tool ==="
 	$(CC) $(CFLAGS) -Irom -I$(OQS_INC) -L$(OQS_LIB) -o tools/sign_fw_c \
 	    tools/sign_fw_c.c \
 	    -loqs -lcrypto -lpthread -Wl,-rpath,$(RPATH)
 
+# ==== Test Matrix script chmod (kept for completeness) ====
 test_matrix: tools/test_matrix.sh
 	@echo "=== [4/4] Making test matrix script executable ==="
 	chmod +x tools/test_matrix.sh
 
+# ==== Lab Flow (guided steps) ====
 lab_flow: all
 	@echo ">>> [Step 1] Creating output directory..."
 	mkdir -p out
@@ -59,29 +66,29 @@ lab_flow: all
 	./rom_mock out/firmware.header out/firmware.payload out/firmware.header out/firmware.payload
 	@echo "=== LAB COMPLETE ==="
 
+# ==== A/B Slot Simulation ====
 test_ab:
 	@echo "=== [A/B Slot Simulation] ==="
 	@./tools/test_ab_slots.sh
 
-# --- Demos ---
-demo_baseline: ; @./tools/demo_baseline.sh
-demo_ab_counter: ; @./tools/demo_ab_counter.sh
-demo_rollback_only: ; @./tools/demo_rollback_only.sh
-demo_rollback_fail: ; @./tools/demo_rollback_fail.sh
-demo_bump_to_2: ; @./tools/demo_bump_to_2.sh
-footprint: ; @./tools/measure_footprint.sh
-all-demos: ; @./tools/run_all_demos.sh
+# ==== Demo Shortcuts ====
+demo_baseline:        ; @./tools/demo_baseline.sh
+demo_ab_counter:      ; @./tools/demo_ab_counter.sh
+demo_rollback_only:   ; @./tools/demo_rollback_only.sh
+demo_rollback_fail:   ; @./tools/demo_rollback_fail.sh
+demo_bump_to_2:       ; @./tools/demo_bump_to_2.sh
+footprint:            ; @./tools/measure_footprint.sh
+all-demos:            ; @./tools/run_all_demos.sh
 
-# --- Verification matrix ---
-verify-matrix: ; @./tools/verify_matrix.sh
-demo-suite: ; @./tools/secure_boot_demo_suite.sh
+# ==== Verification Matrix ====
+verify-matrix:        ; @./tools/verify_matrix.sh
+demo-suite:           ; @./tools/secure_boot_demo_suite.sh
 
-demo: ; ./demo.sh
-demo-clean: ; rm -rf build sim/obj_dir sw/golden/signer
+# ==== Simple demo wrappers ====
+demo:                 ; ./demo.sh
+demo-clean:           ; rm -rf build sim/obj_dir sw/golden/signer
 
-clean:
-	rm -f rom_mock tools/gen_keys_c tools/sign_fw_c rom/otp_pk.h
-
+# ==== Report Generation ====
 report: all
 	@echo ">>> Running PASS and FAIL flows and generating HTML diff…"
 	@chmod +x tools/run_matrix_and_log.sh tools/run_all_pass_and_log.sh tools/run_and_compare.sh
@@ -89,18 +96,24 @@ report: all
 	@echo ">>> Report at: out/pass_vs_fail_diff.html"
 	@command -v xdg-open >/dev/null 2>&1 && xdg-open out/pass_vs_fail_diff.html || true
 
-.PHONY: golden
+# ==== Golden one-touch ====
 golden:
 	./tools/golden.sh
 
-.PHONY: sweep sign-file
+# ==== Size sweep & single-file sign helpers ====
 sweep:
 	./tools/size_sweep.sh
+
 sign-file:
 	./tools/sign_file.sh $(file) $(ver)
 
-	.PHONY: regen
-regen:
-	./tools/gen_otp_header.sh out/pub.key
-	$(MAKE) rom_mock
+# ==== Regenerate OTP header and rebuild ROM ====
+regen: $(OTP_HDR) $(ROM)
 
+# ==== Batch sign folder ====
+sign-folder:
+	./tools/sign_folder.sh $(dir) "$(pattern)"
+
+# ==== Clean ====
+clean:
+	rm -f rom_mock tools/gen_keys_c tools/sign_fw_c rom/otp_pk.h
