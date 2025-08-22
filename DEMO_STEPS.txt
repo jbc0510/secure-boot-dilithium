@@ -1,77 +1,98 @@
-Secure Boot Dilithium — Demo Steps
-=================================
+Secure‑Boot Dilithium: Piece‑by‑piece Demo
+=========================================
 
-This demo walks through each test case individually, showing how the system enforces authenticity, integrity, and anti-rollback for firmware images.
+0) One‑time prep
+Command
+  mkdir -p out
+  ./tools/gen_keys_c out/pub.key out/sec.key
+  tools/gen_otp_header.sh out/pub.key
+  make rom_mock
+Why
+  Generate keypair, bake pubkey into OTP header, build ROM mock.
+Expected
+  “wrote rom/otp_pk.h” and a “rom_mock” binary.
 
-1. Clean Image — Verify Pass
------------------------------
-Generate a valid firmware header and payload, then verify:
+1) Clean image → PASS
+Command
+  dd if=/dev/urandom of=out/fw.clean bs=4096 count=1
+  ./tools/sign_fw_c out/fw.clean out/pub.key out/sec.key 11 out/hdr.clean
+  printf '\x00\x00\x00\x00' > out/otp_counter.bin
+  ./rom_mock out/hdr.clean out/fw.clean out/hdr.clean out/fw.clean
+Why
+  Fresh payload, version=11, min‑version reset.
+Expected
+  PASS.
 
-    ./tools/sign_fw_c out/fw.clean out/pub.key out/sec.key 11 out/hdr.clean
-    ./rom_mock out/hdr.clean out/fw.clean out/hdr.clean out/fw.clean
+2) Payload tamper → FAIL, then control PASS
+Command
+  cp out/fw.clean out/fw.tamper
+  python - <<'PY'
+p="out/fw.tamper"; b=bytearray(open(p,"rb").read()); b[0]^=0xFF; open(p,"wb").write(b)
+PY
+  ./rom_mock out/hdr.clean out/fw.tamper out/hdr.clean out/fw.tamper   # FAIL
+  ./rom_mock out/hdr.clean out/fw.clean  out/hdr.clean out/fw.clean    # PASS
+Why
+  Signature no longer matches; control confirms baseline.
+Expected
+  First FAIL, second PASS.
 
-Expected:
-    [*] Verifying slot: out/hdr.clean, out/fw.clean
-    { "slot": "A", "version": 11, "ok": 1 }
-    ✔ PASS (clean image)
+3) Header/signature tamper → FAIL
+Command
+  ./tools/sign_fw_c out/fw.clean out/pub.key out/sec.key 1 out/hdr.good
+  cp out/hdr.good out/hdr.bad
+  python - <<'PY'
+p="out/hdr.bad"; b=bytearray(open(p,"rb").read()); b[8]^=1; open(p,"wb").write(b)
+PY
+  ./rom_mock out/hdr.bad out/fw.clean out/hdr.bad out/fw.clean
+Why
+  Corrupted signed bytes invalidate signature.
+Expected
+  FAIL.
 
-2. Rollback Protection — Verify Fail
-------------------------------------
-Use an older version counter (ver=1):
+4) Rollback protection
+Command
+  printf '\x00\x00\x00\x00' > out/otp_counter.bin
+  ./tools/sign_fw_c out/fw.clean out/pub.key out/sec.key 5 out/hdr.v5
+  ./rom_mock out/hdr.v5 out/fw.clean out/hdr.v5 out/fw.clean           # PASS
+  ./tools/sign_fw_c out/fw.clean out/pub.key out/sec.key 4 out/hdr.v4
+  ./rom_mock out/hdr.v4 out/fw.clean out/hdr.v4 out/fw.clean           # FAIL
+  ./tools/sign_fw_c out/fw.clean out/pub.key out/sec.key 6 out/hdr.v6
+  ./rom_mock out/hdr.v6 out/fw.clean out/hdr.v6 out/fw.clean           # PASS
+Why
+  OTP stores highest seen version; older images blocked.
+Expected
+  v5 PASS, v4 FAIL, v6 PASS.
 
-    ./tools/sign_fw_c out/fw.old out/pub.key out/sec.key 1 out/hdr.old
-    ./rom_mock out/hdr.old out/fw.old out/hdr.old out/fw.old
+5) A/B slots: prefer newer, then fallback
+Command
+  dd if=/dev/urandom of=out/fw.A bs=4096 count=1
+  dd if=/dev/urandom of=out/fw.B bs=4096 count=1
+  ./tools/sign_fw_c out/fw.A out/pub.key out/sec.key 10 out/hdr.A
+  ./tools/sign_fw_c out/fw.B out/pub.key out/sec.key 11 out/hdr.B
+  ./rom_mock out/hdr.A out/fw.A out/hdr.B out/fw.B                    # PASS; choose B
+  python - <<'PY'
+p="out/fw.B"; b=bytearray(open(p,"rb").read()); b[1]^=0xAA; open(p,"wb").write(b)
+PY
+  ./rom_mock out/hdr.A out/fw.A out/hdr.B out/fw.B                    # PASS; fallback to A
+Why
+  Boot picks higher version; on failure, falls back.
+Expected
+  First boots B, second boots A.
 
-Expected:
-    [*] Verifying slot: out/hdr.old, out/fw.old
-    [-] Rollback: version=1 < 11
-    [X] Both slots failed verification. System halt.
+6) Public‑key mismatch → FAIL
+Command
+  ./tools/gen_keys_c out/pub2.key out/sec2.key
+  ./tools/sign_fw_c out/fw.clean out/pub2.key out/sec2.key 1 out/hdr.otherkey
+  ./rom_mock out/hdr.otherkey out/fw.clean out/hdr.otherkey out/fw.clean
+Why
+  Signed by key not in OTP.
+Expected
+  FAIL.
 
-3. Payload Tamper — Detect Failure
-----------------------------------
-Flip a byte in the payload to simulate tampering:
-
-    cp out/fw.clean out/fw.tamper
-    printf '\x00' | dd of=out/fw.tamper bs=1 seek=10 count=1 conv=notrunc
-    ./rom_mock out/hdr.clean out/fw.tamper out/hdr.clean out/fw.tamper
-
-Expected:
-    [*] Verifying slot: out/hdr.clean, out/fw.tamper
-    [-] Signature check failed
-    [X] Both slots failed verification. System halt.
-
-4. Signature Tamper — Detect Failure
-------------------------------------
-Flip a byte in the header’s signature field:
-
-    cp out/hdr.clean out/hdr.bad
-    printf '\xFF' | dd of=out/hdr.bad bs=1 seek=128 count=1 conv=notrunc
-    ./rom_mock out/hdr.bad out/fw.clean out/hdr.bad out/fw.clean
-
-Expected:
-    [*] Verifying slot: out/hdr.bad, out/fw.clean
-    [-] Signature check failed
-    [X] Both slots failed verification. System halt.
-
-5. Version Bump — Verify Pass
------------------------------
-Increment the firmware version to meet the anti-rollback rule:
-
-    ./tools/sign_fw_c out/fw.new out/pub.key out/sec.key 12 out/hdr.new
-    ./rom_mock out/hdr.new out/fw.new out/hdr.new out/fw.new
-
-Expected:
-    [*] Verifying slot: out/hdr.new, out/fw.new
-    { "slot": "A", "version": 12, "ok": 1 }
-    ✔ PASS (version meets min)
-
-Summary
--------
-- Clean Image ✅ Pass
-- Rollback Attempt ❌ Blocked
-- Payload Tamper ❌ Blocked
-- Signature Tamper ❌ Blocked
-- Version Bump ✅ Pass
-
-This demonstrates the secure-boot chain is enforcing authenticity, integrity, and freshness using Dilithium PQC signatures.
-
+7) Scripted summary (sanity)
+Command
+  ./tools/test_matrix.sh
+Why
+  Minimal PASS/expected‑FAIL replay.
+Expected
+  PASS where expected, one rollback FAIL by design.
