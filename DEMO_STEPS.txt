@@ -1,0 +1,77 @@
+Secure Boot Dilithium — Demo Steps
+=================================
+
+This demo walks through each test case individually, showing how the system enforces authenticity, integrity, and anti-rollback for firmware images.
+
+1. Clean Image — Verify Pass
+-----------------------------
+Generate a valid firmware header and payload, then verify:
+
+    ./tools/sign_fw_c out/fw.clean out/pub.key out/sec.key 11 out/hdr.clean
+    ./rom_mock out/hdr.clean out/fw.clean out/hdr.clean out/fw.clean
+
+Expected:
+    [*] Verifying slot: out/hdr.clean, out/fw.clean
+    { "slot": "A", "version": 11, "ok": 1 }
+    ✔ PASS (clean image)
+
+2. Rollback Protection — Verify Fail
+------------------------------------
+Use an older version counter (ver=1):
+
+    ./tools/sign_fw_c out/fw.old out/pub.key out/sec.key 1 out/hdr.old
+    ./rom_mock out/hdr.old out/fw.old out/hdr.old out/fw.old
+
+Expected:
+    [*] Verifying slot: out/hdr.old, out/fw.old
+    [-] Rollback: version=1 < 11
+    [X] Both slots failed verification. System halt.
+
+3. Payload Tamper — Detect Failure
+----------------------------------
+Flip a byte in the payload to simulate tampering:
+
+    cp out/fw.clean out/fw.tamper
+    printf '\x00' | dd of=out/fw.tamper bs=1 seek=10 count=1 conv=notrunc
+    ./rom_mock out/hdr.clean out/fw.tamper out/hdr.clean out/fw.tamper
+
+Expected:
+    [*] Verifying slot: out/hdr.clean, out/fw.tamper
+    [-] Signature check failed
+    [X] Both slots failed verification. System halt.
+
+4. Signature Tamper — Detect Failure
+------------------------------------
+Flip a byte in the header’s signature field:
+
+    cp out/hdr.clean out/hdr.bad
+    printf '\xFF' | dd of=out/hdr.bad bs=1 seek=128 count=1 conv=notrunc
+    ./rom_mock out/hdr.bad out/fw.clean out/hdr.bad out/fw.clean
+
+Expected:
+    [*] Verifying slot: out/hdr.bad, out/fw.clean
+    [-] Signature check failed
+    [X] Both slots failed verification. System halt.
+
+5. Version Bump — Verify Pass
+-----------------------------
+Increment the firmware version to meet the anti-rollback rule:
+
+    ./tools/sign_fw_c out/fw.new out/pub.key out/sec.key 12 out/hdr.new
+    ./rom_mock out/hdr.new out/fw.new out/hdr.new out/fw.new
+
+Expected:
+    [*] Verifying slot: out/hdr.new, out/fw.new
+    { "slot": "A", "version": 12, "ok": 1 }
+    ✔ PASS (version meets min)
+
+Summary
+-------
+- Clean Image ✅ Pass
+- Rollback Attempt ❌ Blocked
+- Payload Tamper ❌ Blocked
+- Signature Tamper ❌ Blocked
+- Version Bump ✅ Pass
+
+This demonstrates the secure-boot chain is enforcing authenticity, integrity, and freshness using Dilithium PQC signatures.
+
