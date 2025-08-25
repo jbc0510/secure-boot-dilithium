@@ -7,6 +7,7 @@ This section shows how to spin up a *fresh clean demo* and run through all verif
 ## 0. Fresh Environment
 
 cd ~/projects
+
 TS=$(date +%Y%m%d_%H%M%S)
 cp -r secure-boot-dilithium secure-boot-dilithium-demo-$TS
 cd secure-boot-dilithium-demo-$TS
