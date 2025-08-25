@@ -1,0 +1,23 @@
+[33m[*] Verifying slot A: out/firmware.header, out/firmware.payload
+[0m[V] slot=A version=11 fw_bytes=65536 pk_len=1312 sig_len=2420
+[V] hdr_sha256=e73ea39a1fb12e2ca980a45107f809f53bafa813ae6446309f3a38c10ee78ad2
+[V] fw_sha256=9b36fe35dda9c335f2e9d32d49d4e2c039972075052d2f34df9ca39ee292e1bf
+[V] otp_pk_hash=4e05e27fc388df3256b9b1798a30a57c250adebae7dbc8025b412cf8586701bf
+[V] pk_hash    =4e05e27fc388df3256b9b1798a30a57c250adebae7dbc8025b412cf8586701bf
+[V] fw_shake256_64=e406b919ce26902928e83b86c623fe77909447dcd324c5c74096a9c32943bbf3b89e4c69b188f42af6df27bbf99092f8979c52dda7eba79910becab5a0782c80
+[V] verify_rc=-3 time_ms=0.076
+[31m[-] Signature verify FAIL
+[0m{"slot":"A","version":11,"ok":0}
+[33m[*] Slot A failed, trying Slot B...
+[0m[33m[*] Verifying slot B: out/firmware.header, out/firmware.payload
+[0m[V] slot=B version=11 fw_bytes=65536 pk_len=1312 sig_len=2420
+[V] hdr_sha256=e73ea39a1fb12e2ca980a45107f809f53bafa813ae6446309f3a38c10ee78ad2
+[V] fw_sha256=9b36fe35dda9c335f2e9d32d49d4e2c039972075052d2f34df9ca39ee292e1bf
+[V] otp_pk_hash=4e05e27fc388df3256b9b1798a30a57c250adebae7dbc8025b412cf8586701bf
+[V] pk_hash    =4e05e27fc388df3256b9b1798a30a57c250adebae7dbc8025b412cf8586701bf
+[V] fw_shake256_64=e406b919ce26902928e83b86c623fe77909447dcd324c5c74096a9c32943bbf3b89e4c69b188f42af6df27bbf99092f8979c52dda7eba79910becab5a0782c80
+[V] verify_rc=-3 time_ms=0.014
+[31m[-] Signature verify FAIL
+[0m{"slot":"B","version":11,"ok":0}
+[31m[X] Both slots failed verification. System halt.
+[0m

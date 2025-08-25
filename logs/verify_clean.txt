@@ -1,0 +1,9 @@
+[33m[*] Verifying slot A: out/firmware.header, out/firmware.payload
+[0m[V] slot=A version=12 fw_bytes=65536 pk_len=1312 sig_len=2420
+[V] hdr_sha256=fd381c1b860a1b7fbbf38fa4af10c3454196e9dedd0fefc7cb7585561e5bc641
+[V] fw_sha256=51f17dfa1616609767a5b87aeefd448d7827f3f5eb186230e9bb694d7b320bad
+[V] otp_pk_hash=4e05e27fc388df3256b9b1798a30a57c250adebae7dbc8025b412cf8586701bf
+[V] pk_hash    =4e05e27fc388df3256b9b1798a30a57c250adebae7dbc8025b412cf8586701bf
+[V] fw_shake256_64=b5d6bbefef35b07a7b2a72a66aaf3eba97f417927e0d2ab4e044175cb5b0633f56bde959f7fd869e4bd6cd5f0c17f3f9bc59c55a15a62363753823cb66938d4d
+[32m[+] VERIFY PASS — jumping to firmware (out/firmware.payload)
+[0m{"slot":"A","version":12,"ok":1,"fw_bytes":65536,"pk_len":1312,"sig_len":2420,"verify_ms":0.097}

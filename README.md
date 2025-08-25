@@ -1,4 +1,55 @@
+# Dilithium Secure Boot 
 # Dilithium Secure Boot — Demo Walkthrough
+
+Minimal, repeatable flow for onboarding and demos. Commands are copy-paste ready. Explanations are short and literal.
+
+## Prereqs
+
+- `liboqs` and OpenSSL available to the compiler.
+- Headers and libs on one of these paths:
+  - `$CONDA_PREFIX/include` and `$CONDA_PREFIX/lib`, or
+  - `$HOME/.local/include` and `$HOME/.local/lib`
+- Tools use this interface:
+  - `gen_keys_c <pub_out> <sec_out>`
+  - `sign_fw_c <payload> <pub.key> <sec.key> <version> <header_out>`
+  - `rom_mock <hdrA> <fwA> <hdrB> <fwB>`  (no `-v`)
+
+---
+
+## 0) Fresh demo environment (new folder each time)
+
+Why: keep your main repo clean and make every run reproducible.
+
+```bash
+cd ~/projects
+TS=$(date +%Y%m%d_%H%M%S)
+cp -r secure-boot-dilithium secure-boot-dilithium-demo-$TS
+cd secure-boot-dilithium-demo-$TS
+
+# liboqs prefix for compiler flags
+CPFX="${CONDA_PREFIX:-$HOME/.local}"
+
+# clean outputs
+rm -rf out && mkdir out
+
+# build tools explicitly with oqs paths
+cc -O2 -Wall -Wextra -I"$CPFX/include" -L"$CPFX/lib" -Wl,-rpath,"$CPFX/lib" \
+  -o tools/gen_keys_c tools/gen_keys_c.c -loqs -lcrypto -lpthread
+
+cc -O2 -Wall -Wextra -Irom -I"$CPFX/include" -L"$CPFX/lib" -Wl,-rpath,"$CPFX/lib" \
+  -o tools/sign_fw_c tools/sign_fw_c.c -loqs -lcrypto -lpthread
+
+# keys and OTP header (trusted pubkey compiled into ROM)
+./tools/gen_keys_c out/pub.key out/sec.key
+./tools/gen_otp_header.sh out/pub.key
+
+# build ROM mock after otp_pk.h exists
+cc -O2 -Wall -Wextra -Irom -I"$CPFX/include" -L"$CPFX/lib" -Wl,-rpath,"$CPFX/lib" \
+  -o rom_mock rom/boot_rom.c sw/verify_lib.c -loqs -lcrypto -lpthread
+
+
+
+— Demo Walkthrough
 
 This section shows how to spin up a *fresh clean demo* and run through all verification cases.
 

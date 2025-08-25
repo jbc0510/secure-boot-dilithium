@@ -1,0 +1,9 @@
+  391  ./tools/test_matrix.sh
+  392  chmod +x tools/test_matrix.sh
+  394  ./tools/test_matrix.sh
+  395  git add tools/test_matrix.sh Makefile rom/boot_rom.c rom/image_format.h tools/sign_fw_c.c
+  400  ./tools/test_matrix.sh
+  401  history | grep test_matrix.sh > logs/past_runs.log
+  402  ./tools/test_matrix.sh | tee -a logs/test_history.log
+  404  ./tools/test_matrix.sh | tee -a logs/test_history.log
+  405  history | grep test_matrix.sh > logs/past_runs.log

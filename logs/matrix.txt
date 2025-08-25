@@ -1,0 +1,4 @@
+wrote rom/otp_pk.h
+[1] PASS Test (clean image)
+[2] Expected FAIL (rollback)
+[3] PASS Test (bump to 11)
