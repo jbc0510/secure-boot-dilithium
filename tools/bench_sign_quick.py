@@ -5,7 +5,7 @@ PUB, SEC = OUT/"pub.key", OUT/"sec.key"
 if not (PUB.exists() and SEC.exists()):
     subprocess.run(["./tools/gen_keys_c", str(PUB), str(SEC)], check=True)
 
-SIZES = [4096, 65536, 1048576, 4194304]   # 4 KiB, 64 KiB, 1 MiB, 4 MiB
+SIZES = [4096, 65536, 1048576, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728]   # 4 KiB, 64 KiB, 1 MiB, 4 MiB
 REPS, ITERS = 3, 50                        # faster: 3 reps × 50 signs
 CSV = OUT/"sign_times_raw.csv"
 

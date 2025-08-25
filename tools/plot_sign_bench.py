@@ -1,23 +1,57 @@
-import pathlib, pandas as pd, matplotlib.pyplot as plt
-raw = pathlib.Path("out/sign_times_raw.csv")
-assert raw.exists(), "Run ./tools/bench_sign_quick.py first."
-df = pd.read_csv(raw)
+#!/usr/bin/env python3
+import pathlib
+import pandas as pd
+import matplotlib.pyplot as plt
+
+RAW = pathlib.Path("out/sign_times_raw.csv")
+assert RAW.exists(), "Run ./tools/bench_sign_quick.py first."
+
+df = pd.read_csv(RAW)
 df["seconds_per_sign"] = pd.to_numeric(df["seconds_per_sign"], errors="coerce")
-grp = df.groupby("size_bytes")["seconds_per_sign"]
-summary = grp.agg(mean_seconds="mean", std_seconds="std", n="count").reset_index()
-summary["std_seconds"] = summary["std_seconds"].fillna(0.0)
-summary["size_mib"] = summary["size_bytes"] / (1024*1024)
-out_csv = pathlib.Path("out/sign_times_summary.csv")
-summary.sort_values("size_bytes").to_csv(out_csv, index=False)
+
+# Summary stats
+summary = (
+    df.groupby("size_bytes", as_index=False)["seconds_per_sign"]
+      .agg(mean_seconds="mean", std_seconds="std", n="count")
+      .fillna({"std_seconds": 0.0})
+)
+summary["size_mib"] = summary["size_bytes"] / (1024 * 1024)
+summary = summary.sort_values("size_bytes").reset_index(drop=True)
+
+# Throughput
+summary["throughput_MBps"] = summary["size_mib"] / summary["mean_seconds"]
+
+# Write CSV
+OUT_CSV = pathlib.Path("out/sign_times_summary.csv")
+summary.to_csv(OUT_CSV, index=False)
+
+# Plot 1: Mean sign time with error bars
 plt.figure()
-plt.errorbar(summary["size_mib"], summary["mean_seconds"],
-             yerr=summary["std_seconds"], fmt='-o', capsize=4)
+plt.errorbar(
+    summary["size_mib"], summary["mean_seconds"],
+    yerr=summary["std_seconds"], fmt="-o", capsize=4
+)
 plt.xlabel("Payload size (MiB)")
-plt.ylabel("Sign time per op (s)")
+plt.ylabel("Mean sign time (s)")
 plt.title("Dilithium signing time vs payload size")
-plt.grid(True, which="both", linestyle=":")
+plt.grid(True, which="both")
 plt.tight_layout()
-png = pathlib.Path("out/sign_times_plot.png")
-plt.savefig(png, dpi=160)
-print(f"Wrote {out_csv}")
-print(f"Wrote {png}")
+PLOT_TIME = pathlib.Path("out/plot_mean_time.png")
+plt.savefig(PLOT_TIME, dpi=160)
+plt.close()
+
+# Plot 2: Throughput
+plt.figure()
+plt.plot(summary["size_mib"], summary["throughput_MBps"], marker="o")
+plt.xlabel("Payload size (MiB)")
+plt.ylabel("Throughput (MB/s)")
+plt.title("Dilithium signing throughput vs payload size")
+plt.grid(True, which="both")
+plt.tight_layout()
+PLOT_THR = pathlib.Path("out/plot_throughput.png")
+plt.savefig(PLOT_THR, dpi=160)
+plt.close()
+
+print(f"Wrote {OUT_CSV}")
+print(f"Wrote {PLOT_TIME}")
+print(f"Wrote {PLOT_THR}")
