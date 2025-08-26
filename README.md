@@ -70,7 +70,7 @@ make clean && make rom_mock
 
 dd if=/dev/urandom of=out/p_clean bs=1 count=65536 status=none
 ./tools/sign_fw_c out/p_clean out/pub.key out/sec.key 1 out/h_clean
-./rom_mock -v out/h_clean out/p_clean out/h_clean out/p_clean
+./rom_mock out/h_clean out/p_clean out/h_clean out/p_clean
 
 2. Wrong-Key FAIL → Rotate OTP → PASS
 
@@ -80,7 +80,7 @@ dd if=/dev/urandom of=out/p_clean bs=1 count=65536 status=none
 
 ./tools/gen_otp_header.sh out/alt_pub.key
 make rom_mock
-./rom_mock -v out/h_wrong out/p_clean out/h_wrong out/p_clean   # PASS
+./rom_mock out/h_wrong out/p_clean out/h_wrong out/p_clean   # PASS
 3. Rollback Protection
 
 
