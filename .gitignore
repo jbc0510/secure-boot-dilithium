@@ -18,3 +18,10 @@ rom/otp_pk.h
 
 out/sign_runs.jsonl
 out/sign_runs.csv
+rom_mock
+out/
+tools/gen_keys_c
+tools/sign_fw_c
+tools/sk_probe
+*.png
+*.csv
