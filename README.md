@@ -107,7 +107,15 @@ cc -O2 -Wall -Wextra -I"$CPFX/include" -L"$CPFX/lib" -Wl,-rpath,"$CPFX/lib" \
 
 ./tools/sk_probe out/sec.key out/pub.key
 
-
+Optional integrity check: tr == CRH(pk)
+python3 - <<'PY'
+from hashlib import shake_256
+pk=open("out/pub.key","rb").read()
+print(shake_256(pk).digest(48).hex())
+PY
+grep '^tr=' out/keymeta.txt | cut -d= -f2
+# lines must match
+ 
 Notes
 
 Always create demos in a new secure-boot-dilithium-demo-<timestamp> folder to keep the repo clean.
