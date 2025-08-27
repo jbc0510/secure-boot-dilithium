@@ -25,3 +25,10 @@ tools/sign_fw_c
 tools/sk_probe
 *.png
 *.csv
+out/
+rom_mock
+tools/gen_keys_c
+tools/sign_fw_c
+*.png
+*.csv
+*.tgz
