@@ -6,7 +6,7 @@ rom_mock_dbg
 sbd-env/
 ext/
 liboqs/
-rom/otp_pk.h
+#rom/otp_pk.h
 
 # Ignore VSCode settings if you don't want them in the repo
 .vscode/
