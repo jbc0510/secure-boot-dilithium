@@ -96,6 +96,18 @@ xdg-open out/plot_throughput.png
 
 ./tools/gen_otp_header.sh out/pub.key
 make rom_mock
+
+
+8. Probe Secret Key (safe, no leakage)
+
+Build once:
+CPFX="${CONDA_PREFIX:-$HOME/.local}"
+cc -O2 -Wall -Wextra -I"$CPFX/include" -L"$CPFX/lib" -Wl,-rpath,"$CPFX/lib" \
+  -o tools/sk_probe tools/sk_probe.c -lcrypto
+
+./tools/sk_probe out/sec.key out/pub.key
+
+
 Notes
 
 Always create demos in a new secure-boot-dilithium-demo-<timestamp> folder to keep the repo clean.
