@@ -1,27 +1,10 @@
-# Ignore build artifacts and temporary files
+venv/
 out/
-build/
-rom_mock
-rom_mock_dbg
-sbd-env/
-ext/
-liboqs/
-rom/otp_pk.h
-
-# Ignore VSCode settings if you don't want them in the repo
-.vscode/
-
-# Ignore any other OS-specific or editor files
-*.swp
-*.swo
-.DS_Store
-
-out/sign_runs.jsonl
-out/sign_runs.csv
-rom_mock
-out/
-tools/gen_keys_c
-tools/sign_fw_c
-tools/sk_probe
-*.png
-*.csv
+dd
+done
+sign_ms=*
+verify_ms=*
+sz=*
+secure-boot-dilithium-demo-*/
+*.bin
+*.key
