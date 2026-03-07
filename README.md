@@ -51,21 +51,7 @@ cc -O2 -Wall -Wextra -Irom -I"$CPFX/include" -L"$CPFX/lib" -Wl,-rpath,"$CPFX/lib
 
 — Demo Walkthrough
 
-This section shows how to spin up a *fresh clean demo* and run through all verification cases.
 
----
-
-## 0. Fresh Environment
-
-cd ~/projects
-
-TS=$(date +%Y%m%d_%H%M%S)
-cp -r secure-boot-dilithium secure-boot-dilithium-demo-$TS
-cd secure-boot-dilithium-demo-$TS
-rm -rf out && mkdir out
-./tools/gen_keys_c out/pub.key out/sec.key
-./tools/gen_otp_header.sh out/pub.key
-make clean && make rom_mock
 1. Clean PASS
 
 dd if=/dev/urandom of=out/p_clean bs=1 count=65536 status=none
@@ -110,6 +96,26 @@ xdg-open out/plot_throughput.png
 
 ./tools/gen_otp_header.sh out/pub.key
 make rom_mock
+
+
+8. Probe Secret Key (safe, no leakage)
+
+Build once:
+CPFX="${CONDA_PREFIX:-$HOME/.local}"
+cc -O2 -Wall -Wextra -I"$CPFX/include" -L"$CPFX/lib" -Wl,-rpath,"$CPFX/lib" \
+  -o tools/sk_probe tools/sk_probe.c -lcrypto
+
+./tools/sk_probe out/sec.key out/pub.key
+
+Optional integrity check: tr == CRH(pk)
+python3 - <<'PY'
+from hashlib import shake_256
+pk=open("out/pub.key","rb").read()
+print(shake_256(pk).digest(48).hex())
+PY
+grep '^tr=' out/keymeta.txt | cut -d= -f2
+# lines must match
+ 
 Notes
 
 Always create demos in a new secure-boot-dilithium-demo-<timestamp> folder to keep the repo clean.

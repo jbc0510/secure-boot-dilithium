@@ -8,3 +8,4 @@ sz=*
 secure-boot-dilithium-demo-*/
 *.bin
 *.key
+rom/otp_pk.h
