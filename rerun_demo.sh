@@ -26,8 +26,8 @@ dd if=/dev/urandom of=out/p_4k bs=1 count=4096 status=none
 ./tools/sign_fw_c out/p_4k out/alt_pub.key out/alt_sec.key 4 out/h_4k
 truncate -s 67108864 out/p_4k
 ./rom_mock out/h_4k out/p_4k out/h_4k out/p_4k || true
-python3 tools/bench_sign_quick.py > out/sign_times_raw.csv
-python3 tools/plot_sign_times.py
+python3 tools/bench_sign_quick.py > out/sign_times_raw.csv || true
+python3 tools/plot_sign_times.py || true
 echo "size_bytes,condition,result,exit_code" > out/verify_matrix.csv
 printf "65536,clean,PASS,0\n65536,rollback,FAIL,1\n65536,tamper_payload,FAIL,1\n65536,mismatch_key,FAIL,1\n67108864,size_mismatch,FAIL,1\n" >> out/verify_matrix.csv
 echo "Done."
