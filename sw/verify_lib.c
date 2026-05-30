@@ -45,7 +45,7 @@ int dilithium_verify_digest(
   (void)digest; (void)digest_len; (void)sig; (void)sig_len; (void)pk; (void)pk_len;
   return -100;
 #else
-  OQS_SIG *s = OQS_SIG_new(OQS_SIG_alg_dilithium_2);
+  OQS_SIG *s = OQS_SIG_new(OQS_SIG_alg_ml_dsa_44);
   if (!s) return -2;
   OQS_STATUS ok = OQS_SIG_verify(s, digest, digest_len, sig, sig_len, pk);
   OQS_SIG_free(s);

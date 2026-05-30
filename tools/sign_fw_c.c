@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  OQS_SIG *s = OQS_SIG_new(OQS_SIG_alg_dilithium_2);
+  OQS_SIG *s = OQS_SIG_new(OQS_SIG_alg_ml_dsa_44);
   if (!s) { fprintf(stderr, "OQS_SIG_new failed\n"); return 1; }
 
   size_t sig_len = s->length_signature;

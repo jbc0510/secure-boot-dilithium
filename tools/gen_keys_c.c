@@ -13,8 +13,8 @@ static void shake256(const unsigned char *in, size_t inlen,
     EVP_MD_CTX_free(ctx);
 }
 
-static void crh_pk(const unsigned char *pk, size_t pklen, unsigned char out48[48]) {
-    shake256(pk, pklen, out48, 48);
+static void crh_pk(const unsigned char *pk, size_t pklen, unsigned char out64[64]) {
+    shake256(pk, pklen, out64, 64);
 }
 
 static int hex2bin(const char *hex, unsigned char *out, size_t outlen) {
@@ -60,13 +60,13 @@ int main(int argc, char **argv) {
     // derive rho, rhoprime, K via simple domain tags
     unsigned char in[33];
     in[0] = 0x00; memcpy(in + 1, seed, 32);
-    unsigned char rho[32], rhoprime[32], K[32], tr[48];
+    unsigned char rho[32], rhoprime[32], K[32], tr[64];
     shake256(in, 33, rho, 32);
     in[0] = 0x01; shake256(in, 33, rhoprime, 32);
     in[0] = 0x02; shake256(in, 33, K, 32);
 
     // liboqs keypair (pk/sk sizes remain 1312/2528 for Dilithium-II)
-    OQS_SIG *alg = OQS_SIG_new(OQS_SIG_alg_dilithium_2);
+    OQS_SIG *alg = OQS_SIG_new(OQS_SIG_alg_ml_dsa_44);
     if (!alg) { fprintf(stderr, "OQS init failed\n"); return 4; }
     unsigned char *pk = (unsigned char *)malloc(alg->length_public_key);
     unsigned char *sk = (unsigned char *)malloc(alg->length_secret_key);
@@ -88,17 +88,17 @@ int main(int argc, char **argv) {
     fwrite(sk, 1, alg->length_secret_key, fp); fclose(fp);
 
     fp = fopen("out/tr.bin", "wb"); if (!fp) { perror("out/tr.bin"); return 7; }
-    fwrite(tr, 1, 48, fp); fclose(fp);
+    fwrite(tr, 1, 64, fp); fclose(fp);
 
     fp = fopen("out/keymeta.txt", "w"); if (!fp) { perror("out/keymeta.txt"); return 7; }
     fprintf(fp, "seed=");      bin2hex(seed, 32, fp);      fprintf(fp, "\n");
     fprintf(fp, "rho=");       bin2hex(rho, 32, fp);       fprintf(fp, "\n");
     fprintf(fp, "rho_prime="); bin2hex(rhoprime, 32, fp);  fprintf(fp, "\n");
     fprintf(fp, "K=");         bin2hex(K, 32, fp);         fprintf(fp, "\n");
-    fprintf(fp, "tr=");        bin2hex(tr, 48, fp);        fprintf(fp, "\n");
+    fprintf(fp, "tr=");        bin2hex(tr, 64, fp);        fprintf(fp, "\n");
     fclose(fp);
 
+    printf("Wrote pk=%zu, sk=%zu, tr=64\n", (size_t)alg->length_public_key, (size_t)alg->length_secret_key);
     OQS_SIG_free(alg); free(pk); free(sk);
-    printf("Wrote pk=%zu, sk=%zu, tr=48\n", (size_t)1312, (size_t)2528);
     return 0;
 }
