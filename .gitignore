@@ -9,3 +9,9 @@ secure-boot-dilithium-demo-*/
 *.bin
 *.key
 rom/otp_pk.h
+
+# Compiled C tools (rebuild via rerun_demo.sh)
+/rom_mock
+/tools/gen_keys_c
+/tools/sign_fw_c
+/tools/sk_probe
